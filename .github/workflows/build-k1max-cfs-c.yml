@@ -1,0 +1,61 @@
+name: Build OrcaSlicer 2.4.2 K1 Max CFS-C
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    timeout-minutes: 360
+    steps:
+      - name: Checkout OrcaSlicer 2.4.2
+        uses: actions/checkout@v4
+        with:
+          repository: OrcaSlicer/OrcaSlicer
+          ref: v2.4.2
+          path: OrcaSlicer
+          submodules: recursive
+          lfs: true
+          persist-credentials: false
+
+      - name: Apply K1 Max CFS-C source patch
+        shell: pwsh
+        working-directory: OrcaSlicer
+        run: |
+          $patchBase64 = "ZGlmZiAtLWdpdCBhL3NyYy9zbGljM3IvVXRpbHMvQ3JlYWxpdHlQcmludC5jcHAgYi9zcmMvc2xpYzNyL1V0aWxzL0NyZWFsaXR5UHJpbnQuY3BwCi0tLSBhL3NyYy9zbGljM3IvVXRpbHMvQ3JlYWxpdHlQcmludC5jcHAKKysrIGIvc3JjL3NsaWMzci9VdGlscy9DcmVhbGl0eVByaW50LmNwcApAQCAtMjQzLDcgKzI0Myw4IEBAIGJvb2wgQ3JlYWxpdHlQcmludDo6c3VwcG9ydHNfbXVsdGlfY29sb3JfcHJpbnQoKSBjb25zdAogICAgIHJldHVybiBtX21vZGVsID09ICJGMDA4IiAgICAvLyBLMiBQbHVzCiAgICAgICAgIHx8IG1fbW9kZWwgPT0gIkYwMTIiICAgIC8vIEsyIFBybwogICAgICAgICB8fCBtX21vZGVsID09ICJGMDIxIiAgICAvLyBLMgotICAgICAgICB8fCBtX21vZGVsID09ICJGMDIyIjsgICAvLyBTUEFSS1ggaTcKKyAgICAgICAgfHwgbV9tb2RlbCA9PSAiRjAyMiIgICAgLy8gU1BBUktYIGk3CisgICAgICAgIHx8IG1fbW9kZWwgPT0gIksxIE1heF9DRlMtQyI7IC8vIEsxIE1heCB3aXRoIG5hdGl2ZSBDRlMtQwogfQogc3RkOjpzdHJpbmcgQ3JlYWxpdHlQcmludDo6bW9kZWxfbmFtZSgpIGNvbnN0CiB7CkBAIC0yNTMsNiArMjU0LDcgQEAgc3RkOjpzdHJpbmcgQ3JlYWxpdHlQcmludDo6bW9kZWxfbmFtZSgpIGNvbnN0CiAgICAgICAgIHsiRjAxMiIsICJLMiBQcm8ifSwKICAgICAgICAgeyJGMDIxIiwgIksyIn0sCiAgICAgICAgIHsiRjAyMiIsICJTUEFSS1ggaTcifSwKKyAgICAgICAgeyJLMSBNYXhfQ0ZTLUMiLCAiSzEgTWF4IENGUy1DIn0sCiAgICAgfTsKQEAgLTI3OCw3ICsyODAsNyBAQCBib29sIENyZWFsaXR5UHJpbnQ6OnN0YXJ0X3ByaW50KHd4U3RyaW5nICZtc2csIGNvbnN0IHN0ZDo6c3RyaW5nICZmaWxlbmFtZSwgY29uc3Qgc3RkOjptYXA8c3RkOjpzdHJpbmcsIHN0ZDo6c3RyaW5nPiYgZXh0ZW5kZWRfaW5mbykgY29uc3QKIHsKICAgICB0cnkgewotICAgICAgICBjb25zdCBzdGQ6OnN0cmluZyBnY29kZV9wYXRoID0gIi9tbnQvVURJU0svcHJpbnRlcl9kYXRhL2djb2Rlcy8iICsgZmlsZW5hbWU7CisgICAgICAgIGNvbnN0IHN0ZDo6c3RyaW5nIGdjb2RlX3BhdGggPSAobV9tb2RlbCA9PSAiSzEgTWF4X0NGUy1DIiA/ICIvdXNyL2RhdGEiIDogIi9tbnQvVURJU0siKSArIHN0ZDo6c3RyaW5nKCIvcHJpbnRlcl9kYXRhL2djb2Rlcy8iKSArIGZpbGVuYW1lOwogCiAgICAgICAgIG5ldDo6aW9fY29udGV4dCBpb2M7Cg=="
+          [IO.File]::WriteAllBytes('k1max-cfs-c.patch', [Convert]::FromBase64String($patchBase64))
+          git apply --check k1max-cfs-c.patch
+          if ($LASTEXITCODE -ne 0) { throw 'Patch does not match v2.4.2 source; build stopped.' }
+          git apply k1max-cfs-c.patch
+          if ($LASTEXITCODE -ne 0) { throw 'Patch application failed.' }
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Whitespace errors in patch.' }
+
+      - name: Configure Visual Studio 2022 build tools
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build dependencies and patched OrcaSlicer
+        shell: cmd
+        working-directory: OrcaSlicer
+        run: call build_release_vs.bat
+
+      - name: Confirm compiled application
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'OrcaSlicer/build/OrcaSlicer')) { throw 'Installed portable app folder not found.' }
+          $exe = Get-ChildItem 'OrcaSlicer/build/OrcaSlicer' -Filter '*.exe' -Recurse | Select-Object -First 1
+          if (!$exe) { throw 'No compiled executable found.' }
+          Write-Output $exe.FullName
+
+      - name: Upload Windows portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrcaSlicer-2.4.2-K1Max-CFS-C-Windows
+          path: OrcaSlicer/build/OrcaSlicer/
+          if-no-files-found: error
+          retention-days: 7
