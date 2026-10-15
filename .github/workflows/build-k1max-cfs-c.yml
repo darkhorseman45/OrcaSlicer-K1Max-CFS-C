@@ -11,6 +11,11 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 360
     steps:
+      - name: Checkout launcher files from this repository
+        uses: actions/checkout@v4
+        with:
+          path: CustomLauncher
+
       - name: Checkout OrcaSlicer 2.4.2
         uses: actions/checkout@v4
         with:
@@ -70,10 +75,24 @@ jobs:
           if (!$exe) { throw 'No compiled executable found.' }
           Write-Output $exe.FullName
 
+      - name: Build Fluidd Windows launcher
+        shell: pwsh
+        run: |
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          if (!(Test-Path $csc)) { throw 'Windows .NET Framework C# compiler not found' }
+          $source = 'CustomLauncher/FluiddLauncher/FluiddLauncher.cs'
+          if (!(Test-Path $source)) { throw 'Missing FluiddLauncher.cs in repository' }
+          $out = 'OrcaSlicer/build/OrcaSlicer/K1Max-CFS-C-Launcher.exe'
+          & $csc /nologo /target:winexe /optimize+ /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:$out $source
+          if ($LASTEXITCODE -ne 0) { throw 'Fluidd launcher compilation failed' }
+          $plinkUrl = 'https://the.earth.li/~sgtatham/putty/latest/w64/plink.exe'
+          Invoke-WebRequest -Uri $plinkUrl -OutFile 'OrcaSlicer/build/OrcaSlicer/plink.exe'
+          if (!(Test-Path 'OrcaSlicer/build/OrcaSlicer/plink.exe')) { throw 'Could not bundle plink.exe' }
+
       - name: Upload Windows portable build
         uses: actions/upload-artifact@v4
         with:
-          name: OrcaSlicer-2.4.2-K1Max-CFS-C-Windows
+          name: OrcaSlicer-2.4.2-K1Max-CFS-C-Fluidd-Windows
           path: OrcaSlicer/build/OrcaSlicer/
           if-no-files-found: error
           retention-days: 7
