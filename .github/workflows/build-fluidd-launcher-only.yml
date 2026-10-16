@@ -20,16 +20,19 @@ jobs:
       - name: Checkout launcher sources
         uses: actions/checkout@v4
 
-      - name: Remove unsupported Plink argument and compile launcher
+      - name: Patch Plink host-key handling and compile launcher
         shell: pwsh
         run: |
           $src = (Resolve-Path -LiteralPath 'FluiddLauncher/FluiddLauncher.cs').ProviderPath
           $text = [System.IO.File]::ReadAllText($src)
           $invalid = '-connect-timeout 5 '
-          if ($text.Contains($invalid)) {
-            $text = $text.Replace($invalid, '')
-            [System.IO.File]::WriteAllText($src, $text)
-          }
+          if ($text.Contains($invalid)) { $text = $text.Replace($invalid, '') }
+          # Plink must not run in batch mode if its host-key confirmation is to be answered.
+          $text = $text.Replace('-ssh -batch -noagent', '-ssh -noagent')
+          $text = $text.Replace('RedirectStandardError = true,', 'RedirectStandardInput = true,' + [Environment]::NewLine + '                        RedirectStandardError = true,')
+          $text = $text.Replace('p.Start();', 'p.Start();' + [Environment]::NewLine + '                    p.StandardInput.WriteLine("y");' + [Environment]::NewLine + '                    p.StandardInput.Close();')
+          if (!$text.Contains('p.StandardInput.WriteLine("y");')) { throw 'Failed to patch confirmation input' }
+          [System.IO.File]::WriteAllText($src, $text)
           New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
           $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
           if (!(Test-Path $compiler)) { throw 'Windows .NET Framework compiler not found' }
@@ -39,7 +42,7 @@ jobs:
       - name: Upload fixed launcher
         uses: actions/upload-artifact@v4
         with:
-          name: K1Max-CFS-C-Launcher-Fixed
+          name: K1Max-CFS-C-Launcher-AutoHostKey
           path: dist/K1Max-CFS-C-Launcher.exe
           if-no-files-found: error
           retention-days: 7
