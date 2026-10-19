@@ -39,6 +39,17 @@ jobs:
           & $compiler /nologo /target:winexe /optimize+ /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /out:dist/K1Max-CFS-C-Launcher.exe $src
           if ($LASTEXITCODE -ne 0) { throw 'Launcher compilation failed' }
 
+      - name: Verify rebuilt launcher artifact
+        shell: pwsh
+        run: |
+          $exe = 'dist/K1Max-CFS-C-Launcher.exe'
+          if (!(Test-Path -LiteralPath $exe)) { throw 'Launcher executable was not produced' }
+          $item = Get-Item -LiteralPath $exe
+          if ($item.Length -lt 4096) { throw 'Launcher executable is unexpectedly small' }
+          $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $exe
+          Write-Output "Rebuilt launcher size: $($item.Length) bytes"
+          Write-Output "SHA256: $($hash.Hash)"
+
       - name: Upload fixed launcher
         uses: actions/upload-artifact@v4
         with:
