@@ -108,9 +108,12 @@ jobs:
           retention-days: 30
 
       - name: Publish versioned GitHub release (optional)
-        if: ${{ inputs.publish_release == true }}
+        if: ${{ inputs.publish_release == true || github.event_name == 'push' }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create '${{ inputs.release_tag }}' 'K1Max-CFSC-Complete-Release-RC1.zip' --title 'K1 Max CFS-C Community Release Candidate' --notes-file 'Docs/RELEASE-NOTES.md' --prerelease
+          $tag = '${{ inputs.release_tag }}'
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = 'v1.0.0-rc1' }
+          gh release create $tag 'K1Max-CFSC-Complete-Release-RC1.zip' --target '${{ github.sha }}' --title 'K1 Max CFS-C Community Release Candidate' --notes-file 'Docs/RELEASE-NOTES.md' --prerelease
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish GitHub Release' }
