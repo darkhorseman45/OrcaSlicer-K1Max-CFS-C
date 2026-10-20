@@ -1,0 +1,32 @@
+name: Prepare pinned Fluidd UI for CFS-C release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prepare-fluidd-ui.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download and verify Fluidd v1.37.7
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 \
+            'https://github.com/fluidd-core/fluidd/releases/download/v1.37.7/fluidd.zip' \
+            --output fluidd-v1.37.7.zip
+          printf '%s  %s\n' \
+            'e45889071dae4e79f22e38bfb28cad0ce0c89e134c09d174cd447c4c93bd9556' \
+            'fluidd-v1.37.7.zip' | sha256sum --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fluidd-v1.37.7-Verified
+          path: fluidd-v1.37.7.zip
+          if-no-files-found: error
+          retention-days: 30
