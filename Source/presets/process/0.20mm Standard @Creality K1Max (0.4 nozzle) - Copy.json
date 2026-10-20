@@ -1,0 +1,24 @@
+{
+	"brim_type": "outer_only",
+	"from": "User",
+	"fuzzy_skin": "disabled_fuzzy",
+	"inherits": "0.20mm Standard @Creality K1Max (0.4 nozzle)",
+	"initial_layer_infill_speed": "40",
+	"initial_layer_speed": "40",
+	"name": "0.20mm Standard @Creality K1Max (0.4 nozzle) - Copy",
+	"prime_tower_brim_width": "8",
+	"prime_tower_infill_gap": "100%",
+	"prime_tower_width": "75",
+	"prime_volume": "65",
+	"print_extruder_id": [
+		"1"
+	],
+	"print_extruder_variant": [
+		"Direct Drive Standard"
+	],
+	"print_settings_id": "0.20mm Standard @Creality K1Max (0.4 nozzle) - Copy",
+	"sparse_infill_density": "25%",
+	"sparse_infill_pattern": "gyroid",
+	"top_surface_pattern": "monotonic",
+	"version": "2.3.2.75"
+}

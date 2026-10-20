@@ -1,17 +1,30 @@
-GitHub repository update: keep these relative file paths exactly:
-.github/workflows/build-k1max-cfs-c.yml
-FluiddLauncher/FluiddLauncher.cs
+# K1 Max CFS-C — OrcaSlicer + Fluidd community installer
 
-The workflow still builds official OrcaSlicer v2.4.2 with the original CFS-C patch.
-It ALSO creates K1Max-CFS-C-Launcher.exe inside the portable artifact, with bundled plink.exe.
-Use K1Max-CFS-C-Launcher.exe rather than orca-slicer.exe to open Orca and run Fluidd startup.
-The launcher displays editable printer IP, an auto-start checkbox and Start Fluidd Now.
-Default IP: 192.168.68.74; default SSH password: creality_2023.
-Its saved settings live under Windows AppData\\Roaming\\K1MaxCfsC\\fluidd-launcher.txt.
+**Community release candidate | 2026-10-20.** User-space toolkit for **rooted Creality K1 Max equipped with native CFS-C**. Original working configuration provided by project owner and adapted into a portable, reversible installer.
 
-NOTE: This is a companion Windows EXE shipped in the OrcaSlicer folder; it does not add a menu
-inside OrcaSlicer itself. This is a low-risk first implementation that preserves the CFS-C patch.
-Plink's -batch mode assumes the SSH host key was already accepted on the PC; your existing
-working bat setup does this. A new PC without that cached key may show a host-key error.
-This version has NOT been built on GitHub Actions or run on a Windows PC yet.
-WARNING: The public-known Creality SSH password is embedded in the launcher and visible to anyone.
+**No firmware replacement. No CFS-C disabling. No KAMP installation.** The printer's stock NEXUSP interface and Creality toolchange functionality remain untouched.
+
+## Download and install
+
+Use the **complete ZIP release**, not GitHub's automatic "Source code" archive; it includes the compiled Windows OrcaSlicer binaries. Extract all files, read `Docs/INSTALLATION.md`, and launch `Windows/Setup.cmd` on Windows 10/11. A new printer must have root SSH access, nginx, Python 3.8+ and ffmpeg available for the optional Fluidd/camera services. The release contains the complete modified OrcaSlicer 2.4.2, launcher, profiles, G-code, user-level printer services, optional `form_tip.json`, rollback and guide.
+
+**Connection ports:** Creality NEXUSP printing 7125; Fluidd with webcam adapter 4408; camera `/stream` on 8080; local-only bridge 7126. The `server.database.list` shim handles the specific unsupported NEXUSP RPC that previously caused Fluidd's `Method unimplemented` popup. Normal printer errors are **not** suppressed.
+
+The owner's original preset calls `NATIVE_ADAPTIVE_MESH` (a machine-specific installed macro). Other owners should import the stock-startup alternative unless their macro is confirmed. The CFS-C `form_tip.json` profile is **manual and optional** because filament behavior varies with machine and firmware.
+
+## Repository structure
+
+- `FluiddLauncher/FluiddLauncher.cs`: IP/password-configurable Windows launcher; stored credentials encrypted for the local Windows user.
+- `.github/workflows/build-fluidd-launcher-only.yml`: builds the launcher without embedding a specific LAN IP or password.
+- `.github/workflows/build-k1max-cfs-c.yml`: builds the modified OrcaSlicer v2.4.2 portable Windows binary.
+- `.github/workflows/prepare-fluidd-ui.yml`: downloads and checksum-verifies the pinned Fluidd UI.
+- `Windows/Setup.ps1` and `Windows/Setup.cmd`: guided installer.
+- `Printer/`: reversible bridge, webcam, nginx, installation/rollback, and optional tip forming profile.
+- `OrcaSlicer/`: printer G-code and importable preset bundle examples (included in full release ZIP).
+- `Docs/INSTALLATION.md`: complete installation, preflight, importing, optional CFS-C settings, testing and recovery.
+
+## Builds and limitations
+
+The modified OrcaSlicer app is built using the official OrcaSlicer `v2.4.2` tag with a targeted CrealityPrint.cpp patch. Its compiled build is distributed in the **release ZIP/Actions artifacts**, not stored in Git history. Fluidd is upstream open-source software and remains separately licensed; follow `LICENSE.txt` in the bundled OrcaSlicer distribution and Fluidd upstream licenses.
+
+**No universal guarantee:** The scripts are based on one working K1 Max CFS-C environment. They have not been field-verified on every Creality firmware, and the release should be treated as a candidate until tested on a second printer. The printer installer rejects an unrelated existing nginx/Fluidd configuration rather than clobbering it.

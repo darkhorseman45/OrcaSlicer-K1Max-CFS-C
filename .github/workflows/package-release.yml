@@ -1,0 +1,112 @@
+name: Package K1 Max CFS-C complete installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      orca_run_id:
+        description: 'Successful modified OrcaSlicer build run ID (artifact must still exist)'
+        required: true
+        default: '38827152804'
+      publish_release:
+        type: boolean
+        description: 'Publish RC ZIP as a GitHub Release after packaging checks'
+        required: false
+        default: false
+      release_tag:
+        description: 'Release tag (only used when publish_release is enabled)'
+        default: 'v1.0.0-rc1'
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  package:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source and guides
+        uses: actions/checkout@v4
+
+      - name: Download successful modified OrcaSlicer Windows build
+        uses: actions/download-artifact@v4
+        with:
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.orca_run_id }}
+          name: OrcaSlicer-2.4.2-K1Max-CFS-C-Fluidd-Windows
+          path: staging/orca
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compile the secure configurable launcher
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path Windows -Force | Out-Null
+          $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          if (!(Test-Path $compiler)) { throw 'Windows .NET Framework C# compiler missing' }
+          $src = (Resolve-Path -LiteralPath 'FluiddLauncher/FluiddLauncher.cs').ProviderPath
+          $out = Join-Path (Resolve-Path Windows).ProviderPath 'K1Max-CFS-C-Launcher.exe'
+          & $compiler /nologo /target:winexe /optimize+ /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Security.dll "/out:$out" "$src"
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher compiler failed' }
+          if ((Get-Item $out).Length -lt 4096) { throw 'Invalid launcher output' }
+
+      - name: Fetch pinned, verified Fluidd UI
+        shell: pwsh
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $uri = 'https://github.com/fluidd-core/fluidd/releases/download/v1.37.7/fluidd.zip'
+          $out = 'Windows/fluidd-v1.37.7.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri $uri -OutFile $out
+          $expected = 'e45889071dae4e79f22e38bfb28cad0ce0c89e134c09d174cd447c4c93bd9556'
+          $actual = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Fluidd UI hash mismatch' }
+
+      - name: Build preset bundles and nested archives
+        shell: pwsh
+        run: |
+          python tools/build_profiles.py
+          if ($LASTEXITCODE -ne 0) { throw 'Profile build failed' }
+          foreach ($required in @('orca-slicer.exe','plink.exe')) {
+            if (!(Test-Path (Join-Path 'staging/orca' $required))) { throw "Missing portable binary: $required" }
+          }
+          Compress-Archive -Path 'staging/orca/*' -DestinationPath 'Windows/OrcaSlicer-2.4.2-K1Max-CFS-C-Windows.zip' -CompressionLevel Optimal
+          Compress-Archive -Path 'Printer/*' -DestinationPath 'Windows/PrinterPayload.zip' -CompressionLevel Optimal
+          @'
+          import zipfile, pathlib, json
+          base=pathlib.Path('.')
+          for key in ['Windows/OrcaSlicer-2.4.2-K1Max-CFS-C-Windows.zip', 'Windows/PrinterPayload.zip', 'Windows/fluidd-v1.37.7.zip']:
+              with zipfile.ZipFile(key) as z:
+                  assert z.testzip() is None, key
+          with zipfile.ZipFile('Windows/PrinterPayload.zip') as z:
+              assert 'install.sh' in z.namelist() and 'webcam_bridge.py' in z.namelist()
+          with zipfile.ZipFile('OrcaSlicer/K1Max-CFS-C-Stock-Startup.orca_printer') as z:
+              json.loads(z.read('bundle_structure.json'))
+          print('Nested archives and profiles OK')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { throw 'Nested archive validation failed' }
+
+      - name: Package complete Windows + printer ZIP
+        shell: pwsh
+        run: |
+          $paths = @('README.md','Docs','Windows','Printer','Source','OrcaSlicer','tools')
+          Compress-Archive -Path $paths -DestinationPath 'K1Max-CFSC-Complete-Release-RC1.zip' -CompressionLevel Optimal
+          if ((Get-Item 'K1Max-CFSC-Complete-Release-RC1.zip').Length -lt 100MB) {
+            throw 'Release archive missing full modified OrcaSlicer binaries'
+          }
+          Get-FileHash -Algorithm SHA256 'K1Max-CFSC-Complete-Release-RC1.zip'
+
+      - name: Upload complete installer ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: K1Max-CFSC-Complete-Release-RC1
+          path: K1Max-CFSC-Complete-Release-RC1.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish versioned GitHub release (optional)
+        if: ${{ inputs.publish_release == true }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create '${{ inputs.release_tag }}' 'K1Max-CFSC-Complete-Release-RC1.zip' --title 'K1 Max CFS-C Community Release Candidate' --notes-file 'Docs/RELEASE-NOTES.md' --prerelease

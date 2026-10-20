@@ -1,0 +1,9 @@
+THIRD-PARTY SOFTWARE
+
+OrcaSlicer 2.4.2 is third-party open-source software. This community build applies a targeted Creality CFS-C compatibility patch. Consult the upstream OrcaSlicer LICENSE.txt inside the bundled portable distribution.
+
+Fluidd v1.37.7 is a separate third-party open-source web UI, downloaded from its public release and verified against a pinned SHA-256 digest. Consult https://github.com/fluidd-core/fluidd for license and acknowledgements.
+
+PuTTY Plink for Windows (bundled with the OrcaSlicer build) is a third-party SSH client; see https://www.chiark.greenend.org.uk/~sgtatham/putty/ for upstream licensing.
+
+This package is a community project, not endorsed by Creality, OrcaSlicer or Fluidd. User-level changes only; stock printer firmware remains untouched.

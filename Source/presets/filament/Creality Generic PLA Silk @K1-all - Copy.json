@@ -1,0 +1,24 @@
+{
+	"filament_extruder_variant": [
+		"Direct Drive Standard"
+	],
+	"filament_settings_id": [
+		"Creality Generic PLA Silk @K1-all - Copy"
+	],
+	"from": "User",
+	"inherits": "Creality Generic PLA Silk @K1-all",
+	"name": "Creality Generic PLA Silk @K1-all - Copy",
+	"nozzle_temperature": [
+		"210"
+	],
+	"nozzle_temperature_initial_layer": [
+		"215"
+	],
+	"textured_plate_temp": [
+		"58"
+	],
+	"textured_plate_temp_initial_layer": [
+		"58"
+	],
+	"version": "2.3.2.75"
+}
