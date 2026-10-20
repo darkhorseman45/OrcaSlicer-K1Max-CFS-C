@@ -20,19 +20,12 @@ jobs:
       - name: Checkout launcher sources
         uses: actions/checkout@v4
 
-      - name: Patch Plink host-key handling and compile launcher
+      - name: Compile launcher with SSH host-key retry
         shell: pwsh
         run: |
           $src = (Resolve-Path -LiteralPath 'FluiddLauncher/FluiddLauncher.cs').ProviderPath
           $text = [System.IO.File]::ReadAllText($src)
-          $invalid = '-connect-timeout 5 '
-          if ($text.Contains($invalid)) { $text = $text.Replace($invalid, '') }
-          # Plink must not run in batch mode if its host-key confirmation is to be answered.
-          $text = $text.Replace('-ssh -batch -noagent', '-ssh -noagent')
-          $text = $text.Replace('RedirectStandardError = true,', 'RedirectStandardInput = true,' + [Environment]::NewLine + '                        RedirectStandardError = true,')
-          $text = $text.Replace('p.Start();', 'p.Start();' + [Environment]::NewLine + '                    p.StandardInput.WriteLine("y");' + [Environment]::NewLine + '                    p.StandardInput.Close();')
-          if (!$text.Contains('p.StandardInput.WriteLine("y");')) { throw 'Failed to patch confirmation input' }
-          [System.IO.File]::WriteAllText($src, $text)
+          if (!$text.Contains('Retrying with the new SSH host key')) { throw 'Required host-key retry not present in source' }
           New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
           $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
           if (!(Test-Path $compiler)) { throw 'Windows .NET Framework compiler not found' }
