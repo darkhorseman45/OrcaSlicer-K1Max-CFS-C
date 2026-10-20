@@ -40,86 +40,86 @@ jobs:
           $to = $text.IndexOf($endMarker, $from)
           if ($from -lt 0 -or $to -le $from) { throw 'Cannot locate launcher startup body' }
           $replacement = @'
-        Task.Run(() =>
-        {
-            string result;
-            try
-            {
-                PlinkResult response = RunPlink(plink, host, null);
-                bool retried = false;
-                if (!response.TimedOut && response.ExitCode != 0 &&
-                    response.Error.IndexOf("host key", StringComparison.OrdinalIgnoreCase) >= 0)
-                {
-                    // This printer can generate a new Dropbear key on reboot.
-                    // Trust the fingerprint Plink reports, as explicitly requested.
-                    var fingerprint = System.Text.RegularExpressions.Regex.Match(
-                        response.Error, @"SHA256:[A-Za-z0-9+/=]+");
-                    if (fingerprint.Success)
-                    {
-                        retried = true;
-                        response = RunPlink(plink, host, fingerprint.Value);
-                    }
-                }
-                if (response.TimedOut)
-                    result = "SSH connection timed out. Check printer and port 22.";
-                else if (response.ExitCode == 0)
-                    result = retried
-                        ? "Fluidd started (new printer host key accepted)"
-                        : "Fluidd startup command completed";
-                else
-                {
-                    string error = response.Error.Trim();
-                    result = "SSH failed: " +
-                        (error.Length > 190 ? error.Substring(0, 190) : error);
-                }
-            }
-            catch (Exception ex) { result = "Fluidd startup error: " + ex.Message; }
-            if (!IsDisposed && IsHandleCreated)
-                BeginInvoke(new Action(() => status.Text = result));
-        });
+                  Task.Run(() =>
+                  {
+                      string result;
+                      try
+                      {
+                          PlinkResult response = RunPlink(plink, host, null);
+                          bool retried = false;
+                          if (!response.TimedOut && response.ExitCode != 0 &&
+                              response.Error.IndexOf("host key", StringComparison.OrdinalIgnoreCase) >= 0)
+                          {
+                              // This printer can generate a new Dropbear key on reboot.
+                              // Trust the fingerprint Plink reports, as explicitly requested.
+                              var fingerprint = System.Text.RegularExpressions.Regex.Match(
+                                  response.Error, @"SHA256:[A-Za-z0-9+/=]+");
+                              if (fingerprint.Success)
+                              {
+                                  retried = true;
+                                  response = RunPlink(plink, host, fingerprint.Value);
+                              }
+                          }
+                          if (response.TimedOut)
+                              result = "SSH connection timed out. Check printer and port 22.";
+                          else if (response.ExitCode == 0)
+                              result = retried
+                                  ? "Fluidd started (new printer host key accepted)"
+                                  : "Fluidd startup command completed";
+                          else
+                          {
+                              string error = response.Error.Trim();
+                              result = "SSH failed: " +
+                                  (error.Length > 190 ? error.Substring(0, 190) : error);
+                          }
+                      }
+                      catch (Exception ex) { result = "Fluidd startup error: " + ex.Message; }
+                      if (!IsDisposed && IsHandleCreated)
+                          BeginInvoke(new Action(() => status.Text = result));
+                  });
           '@
           $text = $text.Substring(0, $from) + $replacement.TrimEnd() + $text.Substring($to + $endMarker.Length)
 
           $helper = @'
-    private sealed class PlinkResult
-    {
-        public bool TimedOut;
-        public int ExitCode;
-        public string Error;
-    }
-
-    private static PlinkResult RunPlink(string plink, string host, string hostKey)
-    {
-        using (var p = new Process())
-        {
-            p.StartInfo = new ProcessStartInfo
-            {
-                FileName = plink,
-                Arguments = __ARGS_EXPR__,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
-            };
-            p.Start();
-            Task<string> errorTask = p.StandardError.ReadToEndAsync();
-            Task<string> outputTask = p.StandardOutput.ReadToEndAsync();
-            if (!p.WaitForExit(30000))
-            {
-                try { p.Kill(); } catch { }
-                try { p.WaitForExit(5000); } catch { }
-                return new PlinkResult { TimedOut = true, ExitCode = -1, Error = "SSH timeout" };
-            }
-            Task.WaitAll(errorTask, outputTask);
-            return new PlinkResult
-            {
-                TimedOut = false,
-                ExitCode = p.ExitCode,
-                Error = errorTask.Result
-            };
-        }
-    }
-
+              private sealed class PlinkResult
+              {
+                  public bool TimedOut;
+                  public int ExitCode;
+                  public string Error;
+              }
+          
+              private static PlinkResult RunPlink(string plink, string host, string hostKey)
+              {
+                  using (var p = new Process())
+                  {
+                      p.StartInfo = new ProcessStartInfo
+                      {
+                          FileName = plink,
+                          Arguments = __ARGS_EXPR__,
+                          UseShellExecute = false,
+                          CreateNoWindow = true,
+                          RedirectStandardError = true,
+                          RedirectStandardOutput = true
+                      };
+                      p.Start();
+                      Task<string> errorTask = p.StandardError.ReadToEndAsync();
+                      Task<string> outputTask = p.StandardOutput.ReadToEndAsync();
+                      if (!p.WaitForExit(30000))
+                      {
+                          try { p.Kill(); } catch { }
+                          try { p.WaitForExit(5000); } catch { }
+                          return new PlinkResult { TimedOut = true, ExitCode = -1, Error = "SSH timeout" };
+                      }
+                      Task.WaitAll(errorTask, outputTask);
+                      return new PlinkResult
+                      {
+                          TimedOut = false,
+                          ExitCode = p.ExitCode,
+                          Error = errorTask.Result
+                      };
+                  }
+              }
+          
           '@
           $helper = $helper.Replace('__ARGS_EXPR__', $argsExpr)
           $mainMarker = '    [STAThread]'
