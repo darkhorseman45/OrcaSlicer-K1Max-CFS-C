@@ -88,7 +88,7 @@ jobs:
           $source = (Resolve-Path -LiteralPath 'CustomLauncher\FluiddLauncher\FluiddLauncher.cs' -ErrorAction Stop).ProviderPath
           $outDir = (Resolve-Path -LiteralPath 'OrcaSlicer\build\OrcaSlicer' -ErrorAction Stop).ProviderPath
           $out = Join-Path $outDir 'K1Max-CFS-C-Launcher.exe'
-          & $csc /nologo /target:winexe /optimize+ /reference:System.Windows.Forms.dll /reference:System.Drawing.dll "/out:$out" "$source"
+          & $csc /nologo /target:winexe /optimize+ /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.Security.dll "/out:$out" "$source"
           if ($LASTEXITCODE -ne 0) { throw 'Fluidd launcher compilation failed' }
           if (!(Test-Path -LiteralPath $out)) { throw 'Fluidd launcher executable was not produced' }
           $plinkUrl = 'https://the.earth.li/~sgtatham/putty/latest/w64/plink.exe'
@@ -101,4 +101,4 @@ jobs:
           name: OrcaSlicer-2.4.2-K1Max-CFS-C-Fluidd-Windows
           path: OrcaSlicer/build/OrcaSlicer/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
