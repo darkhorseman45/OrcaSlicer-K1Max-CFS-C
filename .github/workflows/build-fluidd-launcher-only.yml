@@ -20,12 +20,115 @@ jobs:
       - name: Checkout launcher sources
         uses: actions/checkout@v4
 
-      - name: Compile launcher with SSH host-key retry
+      - name: Patch SSH host-key retry and compile launcher
         shell: pwsh
         run: |
           $src = (Resolve-Path -LiteralPath 'FluiddLauncher/FluiddLauncher.cs').ProviderPath
           $text = [System.IO.File]::ReadAllText($src)
-          if (!$text.Contains('Retrying with the new SSH host key')) { throw 'Required host-key retry not present in source' }
+          $match = [regex]::Match($text, '(?m)^\s*Arguments = (.+),\r?$')
+          if (!$match.Success) { throw 'Could not find original Plink command in launcher' }
+          $argsExpr = $match.Groups[1].Value
+          if (!$argsExpr.Contains('-connect-timeout 5 ')) { throw 'Plink command structure changed' }
+          $argsExpr = $argsExpr.Replace('-connect-timeout 5 ', '')
+          $hostExpr = '" + host + "'
+          if (!$argsExpr.Contains($hostExpr)) { throw 'Could not find Plink host argument' }
+          $argsExpr = $argsExpr.Replace($hostExpr, '" + (hostKey == null ? "" : "-hostkey " + hostKey + " ") + host + "')
+
+          $startMarker = '        Task.Run(() =>'
+          $endMarker = '        });'
+          $from = $text.IndexOf($startMarker, $text.IndexOf('private void StartFluidd()'))
+          $to = $text.IndexOf($endMarker, $from)
+          if ($from -lt 0 -or $to -le $from) { throw 'Cannot locate launcher startup body' }
+          $replacement = @'
+        Task.Run(() =>
+        {
+            string result;
+            try
+            {
+                PlinkResult response = RunPlink(plink, host, null);
+                bool retried = false;
+                if (!response.TimedOut && response.ExitCode != 0 &&
+                    response.Error.IndexOf("host key", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    // This printer can generate a new Dropbear key on reboot.
+                    // Trust the fingerprint Plink reports, as explicitly requested.
+                    var fingerprint = System.Text.RegularExpressions.Regex.Match(
+                        response.Error, @"SHA256:[A-Za-z0-9+/=]+");
+                    if (fingerprint.Success)
+                    {
+                        retried = true;
+                        response = RunPlink(plink, host, fingerprint.Value);
+                    }
+                }
+                if (response.TimedOut)
+                    result = "SSH connection timed out. Check printer and port 22.";
+                else if (response.ExitCode == 0)
+                    result = retried
+                        ? "Fluidd started (new printer host key accepted)"
+                        : "Fluidd startup command completed";
+                else
+                {
+                    string error = response.Error.Trim();
+                    result = "SSH failed: " +
+                        (error.Length > 190 ? error.Substring(0, 190) : error);
+                }
+            }
+            catch (Exception ex) { result = "Fluidd startup error: " + ex.Message; }
+            if (!IsDisposed && IsHandleCreated)
+                BeginInvoke(new Action(() => status.Text = result));
+        });
+          '@
+          $text = $text.Substring(0, $from) + $replacement.TrimEnd() + $text.Substring($to + $endMarker.Length)
+
+          $helper = @'
+    private sealed class PlinkResult
+    {
+        public bool TimedOut;
+        public int ExitCode;
+        public string Error;
+    }
+
+    private static PlinkResult RunPlink(string plink, string host, string hostKey)
+    {
+        using (var p = new Process())
+        {
+            p.StartInfo = new ProcessStartInfo
+            {
+                FileName = plink,
+                Arguments = __ARGS_EXPR__,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+            p.Start();
+            Task<string> errorTask = p.StandardError.ReadToEndAsync();
+            Task<string> outputTask = p.StandardOutput.ReadToEndAsync();
+            if (!p.WaitForExit(30000))
+            {
+                try { p.Kill(); } catch { }
+                try { p.WaitForExit(5000); } catch { }
+                return new PlinkResult { TimedOut = true, ExitCode = -1, Error = "SSH timeout" };
+            }
+            Task.WaitAll(errorTask, outputTask);
+            return new PlinkResult
+            {
+                TimedOut = false,
+                ExitCode = p.ExitCode,
+                Error = errorTask.Result
+            };
+        }
+    }
+
+          '@
+          $helper = $helper.Replace('__ARGS_EXPR__', $argsExpr)
+          $mainMarker = '    [STAThread]'
+          if (!$text.Contains($mainMarker)) { throw 'Launcher entry point missing' }
+          $text = $text.Replace($mainMarker, $helper.TrimEnd() + [Environment]::NewLine + [Environment]::NewLine + $mainMarker)
+          if (!$text.Contains('RunPlink(plink, host, fingerprint.Value)') -or !$text.Contains('-hostkey ')) {
+            throw 'SSH retry patch did not apply'
+          }
+          [System.IO.File]::WriteAllText($src, $text, [System.Text.UTF8Encoding]::new($false))
           New-Item -ItemType Directory -Force -Path 'dist' | Out-Null
           $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
           if (!(Test-Path $compiler)) { throw 'Windows .NET Framework compiler not found' }
